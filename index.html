@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>لوحة إدارة حجوزات عيادة الأسنان</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap">
+  <style>
+    body { font-family: 'Tajawal', sans-serif; background-color: #f9fafb; color: #111827; margin: 0; }
+    .action-btn { color: white; padding: 0.5rem 1rem; border-radius: 0.25rem; margin: 0 0.25rem; border: none; cursor: pointer; font-size: 0.875rem; }
+    .bg-blue-btn { background-color: #2563eb; }
+    .bg-yellow-btn { background-color: #f59e0b; }
+    .bg-purple-btn { background-color: #2d4c63; }
+    .paid-input, .date-input, .tooth-state-input { padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.25rem; text-align: center; }
+    .paid-input { width: 80px; }
+    .date-input { min-width: 220px; }
+    .tooth-state-input { min-width: 150px; }
+    .editable-container { display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    @keyframes flash { 0%, 100% { background-color: transparent; } 50% { background-color: #fef9c3; } }
+    .flash-update { animation: flash 1s; }
+    header { position: sticky; top: 0; z-index: 20; background-color: rgba(255, 255, 255, 0.8); backdrop-filter: blur(4px); border-bottom: 1px solid #e5e7eb; }
+    .header-content { max-width: 80rem; margin: auto; padding: 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+    .search-container { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .search-group { display: flex; align-items: center; gap: 0.25rem; }
+    .search-group input { padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.25rem; min-width: 150px; }
+    h1 { font-size: 1.25rem; font-weight: 600; }
+    main { max-width: 80rem; margin: auto; padding: 1.5rem 1rem; }
+    table { width: 100%; border-collapse: collapse; background-color: #fff; border: 1px solid #e5e7eb; }
+    th, td { padding: 0.75rem 1rem; border: 1px solid #e5e7eb; text-align: right; vertical-align: middle; }
+    thead { background-color: #f3f4f6; }
+    tbody tr:hover { background-color: #f9fafb; }
+    .text-center { text-align: center; }
+    #loading, #error-message { text-align: center; padding: 1rem; font-size: 1rem; }
+    #error-message { display: none; color: #991b1b; background-color: #fee2e2; border: 1px solid #fca5a5; border-radius: 0.25rem; }
+    .status-badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.875rem; font-weight: 500; }
+    .status-badge.bg-green { background-color: #dcfce7; color: #17522e; }
+    .status-badge.bg-red { background-color: #fee2e2; color: #991b1b; }
+    .status-badge.bg-yellow { background-color: #fef9c3; color: #854d0e; }
+    .bg-green-btn { background-color: #16a34a; }
+    .bg-red-btn { background-color: #dc2626; }
+
+	.image {
+            width: 50px;          /* Adjust image width */
+            height: auto;         /* Maintain aspect ratio */
+        }
+
+
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <h1>لوحة إدارة حجوزات عيادة الأسنان</h1>
+<img src="amaar.jpg" alt="Logo" class="image">
+      <div class="search-container">
+        <div class="search-group">
+          <input type="text" id="nameSearch" placeholder="بحث بالاسم">
+          <button onclick="searchByName()" class="action-btn bg-purple-btn">بحث بالاسم</button>
+        </div>
+        <div class="search-group">
+          <input type="date" id="dateSearch" placeholder="بحث بالتاريخ">
+          <button onclick="searchByDate()" class="action-btn bg-purple-btn">بحث بالتاريخ</button>
+        </div>
+        <button onclick="showTomorrowAppointments()" class="action-btn bg-yellow-btn">مواعيد الغد</button>
+        <button onclick="loadData()" class="action-btn bg-blue-btn">تحديث البيانات</button>
+        <img src="mylogo.gif" alt="Logo" class="image">
+      </div>
+    </div>
+  </header>
+  <main>
+    <div id="loading">جاري تحميل البيانات...</div>
+    <div id="error-message"></div>
+    <table id="main-table" style="display:none;">
+      <thead>
+        <tr>
+          <th class="text-center">#</th>
+          <th>الاسم</th>
+          <th class="text-center">الهاتف</th>
+          <th class="text-center">المشكلة</th>
+          <th class="text-center">الموعد</th>
+          <th class="text-center">الحالة</th>
+          <th class="text-center">المبلغ المدفوع</th>
+          <th class="text-center">إجراءات الحالة</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </main>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxiVLnzzVpYKCUQ6s7eWOqVFR3VtY1v5hwy3FPaFB1d-1RpYCQy7x2OL2UZ99QKEM99AA/exec';
+
+    function toDatetimeLocal(isoDateString) {
+      if (!isoDateString) return '';
+      const date = new Date(isoDateString);
+      if (isNaN(date.getTime())) return '';
+      
+      const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+      const localISOTime = (new Date(date - tzoffset)).toISOString().slice(0, 16);
+      return localISOTime;
+    }
+
+    function render(data) {
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+      if (!data || data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center">لا توجد حجوزات متاحة</td></tr>`;
+        return;
+      }
+      data.forEach((r, i) => {
+        const tr = document.createElement('tr');
+        tr.id = `row-${r.id}`; 
+
+        const statusInfo = {
+          text: 'في الانتظار', className: 'bg-yellow'
+        };
+        if (r.status === 'present') {
+          statusInfo.text = 'حاضر'; statusInfo.className = 'bg-green';
+        } else if (r.status === 'cancelled') {
+          statusInfo.text = 'ملغى'; statusInfo.className = 'bg-red';
+        }
+
+        tr.innerHTML = `
+          <td class="text-center">${i + 1}</td>
+          <td>${r.name || '---'}</td>
+          <td class="text-center">${r.phone || '---'}</td>
+          <td class="text-center">
+            <div class="editable-container">
+              <input type="text" class="tooth-state-input" id="tooth-state-${r.id}" value="${r.tooth_state || ''}">
+              <button class="action-btn bg-blue-btn" onclick="updateRecord(${r.id}, { tooth_state: document.getElementById('tooth-state-${r.id}').value })">حفظ</button>
+            </div>
+          </td>
+          <td class="text-center">
+            <div class="editable-container">
+              <input type="datetime-local" class="date-input" id="rdate-${r.id}" value="${toDatetimeLocal(r.rdate)}">
+              <button class="action-btn bg-blue-btn" onclick="updateRecord(${r.id}, { rdate: document.getElementById('rdate-${r.id}').value })">حفظ</button>
+            </div>
+          </td>
+          <td class="text-center">
+            <span class="status-badge ${statusInfo.className}">${statusInfo.text}</span>
+          </td>
+          <td class="text-center">
+            <div class="editable-container">
+              <input type="number" class="paid-input" id="paid-${r.id}" value="${r.paid || 0}" step="10">
+              <button class="action-btn bg-blue-btn" onclick="updateRecord(${r.id}, { paid: document.getElementById('paid-${r.id}').value })">حفظ</button>
+            </div>
+          </td>
+          <td class="text-center">
+            <button class="action-btn bg-green-btn" onclick="updateRecord(${r.id}, { status: 'present' })">حضور</button>
+            <button class="action-btn bg-red-btn" onclick="updateRecord(${r.id}, { status: 'cancelled' })">إلغاء</button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function updateRecord(id, payload) {
+      const row = document.getElementById(`row-${id}`);
+      if (!row) return;
+
+      if (payload.status !== undefined) {
+        const statusBadge = row.querySelector('.status-badge');
+        statusBadge.textContent = payload.status === 'present' ? 'حاضر' : 'ملغى';
+        statusBadge.className = 'status-badge ' + (payload.status === 'present' ? 'bg-green' : 'bg-red');
+      }
+      
+      row.classList.add('flash-update');
+      setTimeout(() => row.classList.remove('flash-update'), 1000);
+
+      try {
+        await fetch(API_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          body: JSON.stringify({ action: 'update', id: id, ...payload })
+        });
+        console.log(`تم إرسال تحديث للسجل ${id} بنجاح.`);
+      } catch (error) {
+        console.error('فشل إرسال التحديث:', error);
+        alert('فشل تحديث البيانات في السيرفر. يرجى تحديث الصفحة والمحاولة مرة أخرى.');
+      }
+    }
+
+    function searchByName() {
+      const searchTerm = document.getElementById('nameSearch').value.trim().toLowerCase();
+      if (!searchTerm) {
+        alert('الرجاء إدخال اسم للبحث');
+        return;
+      }
+
+      const rows = document.querySelectorAll('#tableBody tr');
+      let found = false;
+
+      rows.forEach(row => {
+        const name = row.querySelector('td:nth-child(2)').textContent.toLowerCase();
+        if (name.includes(searchTerm)) {
+          row.style.display = '';
+          found = true;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      if (!found) {
+        document.getElementById('tableBody').innerHTML = 
+          `<tr><td colspan="8" class="text-center">لا توجد نتائج مطابقة للاسم</td></tr>`;
+      }
+    }
+
+    function searchByDate() {
+  const searchDate = document.getElementById('dateSearch').value;
+  if (!searchDate) {
+    alert('الرجاء اختيار تاريخ للبحث');
+    return;
+  }
+
+  const targetDate = new Date(searchDate);
+  targetDate.setHours(0, 0, 0, 0); // ضبط الوقت لبداية اليوم للتجاهل
+
+  const rows = document.querySelectorAll('#tableBody tr');
+  let found = false;
+
+  rows.forEach(row => {
+    const dateInput = row.querySelector('.date-input');
+    if (!dateInput || !dateInput.value) {
+      row.style.display = 'none';
+      return;
+    }
+
+    const rowDate = new Date(dateInput.value);
+    rowDate.setHours(0, 0, 0, 0); // ضبط الوقت لبداية اليوم
+
+    if (rowDate.getTime() === targetDate.getTime()) {
+      row.style.display = '';
+      found = true;
+    } else {
+      row.style.display = 'none';
+    }
+  });
+
+  if (!found) {
+    document.getElementById('tableBody').innerHTML = 
+      `<tr><td colspan="8" class="text-center">لا توجد مواعيد في التاريخ المحدد</td></tr>`;
+  }
+}
+
+    async function showTomorrowAppointments() {
+      try {
+        const res = await fetch(API_URL + '?cache=' + new Date().getTime());
+        if (!res.ok) throw new Error(`فشل استجابة الشبكة: ${res.status}`);
+        
+        const json = await res.json();
+        if (json.result !== 'success') throw new Error(json.message);
+
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        const tomorrowAppointments = json.data.filter(appointment => {
+          if (!appointment.rdate) return false;
+          const appDate = new Date(appointment.rdate).toISOString().split('T')[0];
+          return appDate === tomorrowStr;
+        });
+
+        if (tomorrowAppointments.length > 0) {
+          render(tomorrowAppointments);
+          alert(`يوجد ${tomorrowAppointments.length} موعد غداً`);
+        } else {
+          render([]);
+          alert('لا توجد مواعيد يوم غد');
+        }
+      } catch (error) {
+        console.error('خطأ في جلب مواعيد الغد:', error);
+        alert('حدث خطأ أثناء جلب مواعيد الغد');
+      }
+    }
+
+    async function loadData() {
+      const loadingDiv = document.getElementById('loading');
+      const errorDiv = document.getElementById('error-message');
+      const mainTable = document.getElementById('main-table');
+      
+      loadingDiv.style.display = 'block';
+      errorDiv.style.display = 'none';
+      mainTable.style.display = 'none';
+
+      try {
+        const res = await fetch(API_URL + '?cache=' + new Date().getTime());
+        if (!res.ok) throw new Error(`فشل استجابة الشبكة: ${res.status}`);
+        
+        const json = await res.json();
+        if (json.result === 'success') {
+          render(json.data);
+          mainTable.style.display = 'table';
+        } else {
+          throw new Error(json.message);
+        }
+      } catch (error) {
+        console.error('تفاصيل الخطأ في loadData:', error);
+        errorDiv.textContent = `فشل في تحميل البيانات: ${error.message}`;
+        errorDiv.style.display = 'block';
+      } finally {
+        loadingDiv.style.display = 'none';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadData);
+  </script>
+</body>
+</html>
