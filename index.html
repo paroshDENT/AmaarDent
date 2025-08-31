@@ -38,20 +38,14 @@
     .status-badge.bg-yellow { background-color: #fef9c3; color: #854d0e; }
     .bg-green-btn { background-color: #16a34a; }
     .bg-red-btn { background-color: #dc2626; }
-
-	.image {
-            width: 50px;          /* Adjust image width */
-            height: auto;         /* Maintain aspect ratio */
-        }
-
-
+    .bg-whatsapp-btn { background-color: #25D366; }
+    .bg-whatsapp-sent { background-color: #128C7E; }
   </style>
 </head>
 <body>
   <header>
     <div class="header-content">
       <h1>لوحة إدارة حجوزات عيادة الأسنان</h1>
-<img src="amaar.jpg" alt="Logo" class="image">
       <div class="search-container">
         <div class="search-group">
           <input type="text" id="nameSearch" placeholder="بحث بالاسم">
@@ -63,7 +57,6 @@
         </div>
         <button onclick="showTomorrowAppointments()" class="action-btn bg-yellow-btn">مواعيد الغد</button>
         <button onclick="loadData()" class="action-btn bg-blue-btn">تحديث البيانات</button>
-        <img src="mylogo.gif" alt="Logo" class="image">
       </div>
     </div>
   </header>
@@ -81,6 +74,7 @@
           <th class="text-center">الحالة</th>
           <th class="text-center">المبلغ المدفوع</th>
           <th class="text-center">إجراءات الحالة</th>
+          <th class="text-center">إرسال تنبيه</th>
         </tr>
       </thead>
       <tbody id="tableBody"></tbody>
@@ -89,6 +83,8 @@
 
   <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycbxiVLnzzVpYKCUQ6s7eWOqVFR3VtY1v5hwy3FPaFB1d-1RpYCQy7x2OL2UZ99QKEM99AA/exec';
+    // تخزين حالة الأزرار التي تم الضغط عليها
+    const whatsappSent = JSON.parse(localStorage.getItem('whatsappSent')) || {};
 
     function toDatetimeLocal(isoDateString) {
       if (!isoDateString) return '';
@@ -100,11 +96,71 @@
       return localISOTime;
     }
 
+    function formatDateForMessage(dateString) {
+      if (!dateString) return 'غير محدد';
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'غير محدد';
+      
+      // استخدام التنسيق الميلادي
+      return date.toLocaleString('ar-SA', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        calendar: 'gregory' // استخدام التقويم الميلادي
+      });
+    }
+
+    function sendWhatsApp(phone, name, id) {
+      if (!phone) {
+        alert('لا يوجد رقم هاتف لهذا المريض');
+        return;
+      }
+      
+      // الحصول على التاريخ المحدث من حقل الإدخال
+      const dateInput = document.getElementById(`rdate-${id}`);
+      const appointmentDate = dateInput ? dateInput.value : '';
+      
+      // تنظيف رقم الهاتف (إزالة أي رموز غير رقمية)
+      const cleanedPhone = phone.replace(/\D/g, '');
+      
+      // تحضير الرسالة
+      const formattedDate = formatDateForMessage(appointmentDate);
+      const message = `مرحباً ${name || 'عميلنا الكريم'}، نذكرك بموعدك في عيادة الأسنان بتاريخ: ${formattedDate}. نرجو الحضور في الوقت المحدد. شكراً لثقتكم بنا.
+
+سڵاو ${name || 'نەخۆشە بەڕێزەکە'}, کاتەکەی لە: ${formattedDate}. تکایە لە کاتی خۆیدا بگەین. سوپاس بۆ متمانەتان.`;
+      
+      // ترميز الرسالة للرابط
+      const encodedMessage = encodeURIComponent(message);
+      
+      // إنشاء رابط واتساب
+      const whatsappURL = `https://wa.me/${cleanedPhone}?text=${encodedMessage}`;
+      
+      // فتح الرابط في نافذة جديدة
+      window.open(whatsappURL, '_blank');
+      
+      // تحديث حالة الزر لتغيير لونه
+      if (id) {
+        whatsappSent[id] = true;
+        localStorage.setItem('whatsappSent', JSON.stringify(whatsappSent));
+        
+        // تحديث مظهر الزر مباشرة
+        const button = document.querySelector(`button[onclick="sendWhatsApp('${phone}', '${name}', ${id})"]`);
+        if (button) {
+          button.classList.remove('bg-whatsapp-btn');
+          button.classList.add('bg-whatsapp-sent');
+          button.textContent = 'تم الإرسال';
+        }
+      }
+    }
+
     function render(data) {
       const tbody = document.getElementById('tableBody');
       tbody.innerHTML = '';
       if (!data || data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center">لا توجد حجوزات متاحة</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center">لا توجد حجوزات متاحة</td></tr>`;
         return;
       }
       data.forEach((r, i) => {
@@ -119,6 +175,11 @@
         } else if (r.status === 'cancelled') {
           statusInfo.text = 'ملغى'; statusInfo.className = 'bg-red';
         }
+
+        // تحديد إذا كان الزر قد تم الضغط عليه مسبقاً
+        const isSent = whatsappSent[r.id];
+        const whatsappBtnClass = isSent ? 'bg-whatsapp-sent' : 'bg-whatsapp-btn';
+        const whatsappBtnText = isSent ? 'تم الإرسال' : 'إرسال واتساب';
 
         tr.innerHTML = `
           <td class="text-center">${i + 1}</td>
@@ -148,6 +209,9 @@
           <td class="text-center">
             <button class="action-btn bg-green-btn" onclick="updateRecord(${r.id}, { status: 'present' })">حضور</button>
             <button class="action-btn bg-red-btn" onclick="updateRecord(${r.id}, { status: 'cancelled' })">إلغاء</button>
+          </td>
+          <td class="text-center">
+            <button class="action-btn ${whatsappBtnClass}" onclick="sendWhatsApp('${r.phone}', '${r.name}', ${r.id})">${whatsappBtnText}</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -201,46 +265,46 @@
 
       if (!found) {
         document.getElementById('tableBody').innerHTML = 
-          `<tr><td colspan="8" class="text-center">لا توجد نتائج مطابقة للاسم</td></tr>`;
+          `<tr><td colspan="9" class="text-center">لا توجد نتائج مطابقة للاسم</td></tr>`;
       }
     }
 
     function searchByDate() {
-  const searchDate = document.getElementById('dateSearch').value;
-  if (!searchDate) {
-    alert('الرجاء اختيار تاريخ للبحث');
-    return;
-  }
+      const searchDate = document.getElementById('dateSearch').value;
+      if (!searchDate) {
+        alert('الرجاء اختيار تاريخ للبحث');
+        return;
+      }
 
-  const targetDate = new Date(searchDate);
-  targetDate.setHours(0, 0, 0, 0); // ضبط الوقت لبداية اليوم للتجاهل
+      const targetDate = new Date(searchDate);
+      targetDate.setHours(0, 0, 0, 0);
 
-  const rows = document.querySelectorAll('#tableBody tr');
-  let found = false;
+      const rows = document.querySelectorAll('#tableBody tr');
+      let found = false;
 
-  rows.forEach(row => {
-    const dateInput = row.querySelector('.date-input');
-    if (!dateInput || !dateInput.value) {
-      row.style.display = 'none';
-      return;
+      rows.forEach(row => {
+        const dateInput = row.querySelector('.date-input');
+        if (!dateInput || !dateInput.value) {
+          row.style.display = 'none';
+          return;
+        }
+
+        const rowDate = new Date(dateInput.value);
+        rowDate.setHours(0, 0, 0, 0);
+
+        if (rowDate.getTime() === targetDate.getTime()) {
+          row.style.display = '';
+          found = true;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      if (!found) {
+        document.getElementById('tableBody').innerHTML = 
+          `<tr><td colspan="9" class="text-center">لا توجد مواعيد في التاريخ المحدد</td></tr>`;
+      }
     }
-
-    const rowDate = new Date(dateInput.value);
-    rowDate.setHours(0, 0, 0, 0); // ضبط الوقت لبداية اليوم
-
-    if (rowDate.getTime() === targetDate.getTime()) {
-      row.style.display = '';
-      found = true;
-    } else {
-      row.style.display = 'none';
-    }
-  });
-
-  if (!found) {
-    document.getElementById('tableBody').innerHTML = 
-      `<tr><td colspan="8" class="text-center">لا توجد مواعيد في التاريخ المحدد</td></tr>`;
-  }
-}
 
     async function showTomorrowAppointments() {
       try {
